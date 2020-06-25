@@ -122,3 +122,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# My gitignores
+.idea
+MY_README.md
+config.py
