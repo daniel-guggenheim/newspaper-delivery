@@ -1,5 +1,5 @@
 # Send daily newspaper
-Send an email each morning with the newspaper of the day in pdf.
+Send an email each morning with the newspaper of the day in pdf. (for the Swiss newspaper "Le Temps" https://www.letemps.ch/)
 
 ## Configuration
 - Install [Google Cloud SDK](https://cloud.google.com/sdk/install)
