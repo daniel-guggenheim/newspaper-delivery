@@ -82,7 +82,7 @@ def send_email(server_address, port, send_from, send_to, email_password, email_c
 
 def run_app():
     # Email text
-    subject = "Le Temps - l'édition du jour".format(datetime.today().strftime('%d.%m.%Y'))
+    subject = "Le Temps - {}".format(datetime.today().strftime('%d.%m.%Y'))
     body = "Bonjour,\n\nVoici l'édition du jour du journal Le Temps ({}) en PDF.\n\nA bientôt,\nSystème automatique d'envoi par Daniel Guggenheim".format(
         datetime.today().strftime('%A, %d.%m.%Y'))
     attachement_name = 'le_temps_{}.pdf'.format(datetime.today().strftime('%Y_%m_%d'))
