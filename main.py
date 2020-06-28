@@ -106,7 +106,7 @@ def main(data, context):
     # locale.setlocale(locale.LC_TIME, "fr-CH")
 
     # No episod on Sunday
-    if datetime.today() == SUNDAY:
+    if datetime.today().weekday() == SUNDAY:
         logging.info('It is Sunday. No edition will be downloaded today.')
     else:
         logging.info('It is not Sunday. Will try to download the daily edition.')
