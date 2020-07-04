@@ -12,14 +12,24 @@ from config import config_vars as configuration
 SUNDAY: int = 6
 
 
-def download_pdf(pdf_url, login_url, login_data):
+def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
     logging.info("Connecting to LeTemps website to download pdf.")
     with requests.Session() as session:
         try:
-            logging.info("Try to connect to url {}".format(login_url))
-            login_response = session.post(login_url, data=login_data)
+            logging.info("Login to LeTemps at {}".format(login_url))
+            login_response = session.post(login_url, data=login_data, timeout=30)
+
+            # Download pdf and handle timeout
             logging.info("Download pdf file from {}".format(pdf_url))
-            pdf_response = session.get(pdf_url)
+            try:
+                pdf_response = session.get(pdf_url, timeout=timeout)
+            except requests.exceptions.Timeout as e:
+                logging.error("Request timed out: {}.".format(timeout))
+                logging.error(e)
+                logging.info("Starting new request with double timeout.")
+                return download_pdf(pdf_url, login_url, login_data, timeout=(timeout[0] * 2, timeout[1] * 2))
+
+            # Handling response
             if not pdf_response.ok:
                 logging.error("Impossible to download pdf from 'Le Temps'. Error code is {}.".format(
                     pdf_response.status_code))
