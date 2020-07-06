@@ -1,5 +1,6 @@
 import requests
 import logging
+import pytz
 from datetime import datetime
 # import locale # not supported on Google Cloud Functions
 import smtplib
@@ -10,6 +11,8 @@ from email.utils import formatdate
 from config import config_vars as configuration
 
 SUNDAY: int = 6
+TIMEZONE = pytz.timezone("Europe/Zurich")
+NOW = datetime.now(TIMEZONE)
 
 
 def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
@@ -46,7 +49,7 @@ def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
 
 
 def download_pdf_with_config():
-    today_str = datetime.today().strftime('%Y%m%d')
+    today_str = NOW.strftime('%Y%m%d')
     pdf_url = "https://www.letemps.ch/pdf/{}/download".format(today_str)
     login_url = 'https://www.letemps.ch/user/login?destination=/'
     login_data = {
@@ -92,10 +95,10 @@ def send_email(server_address, port, send_from, send_to, email_password, email_c
 
 def run_app():
     # Email text
-    subject = "Le Temps - {}".format(datetime.today().strftime('%d.%m.%Y'))
+    subject = "Le Temps - {}".format(NOW.strftime('%d.%m.%Y'))
     body = "Bonjour,\n\nVoici l'édition du jour du journal Le Temps ({}) en PDF.\n\nA bientôt,\nSystème automatique d'envoi par Daniel Guggenheim".format(
-        datetime.today().strftime('%A, %d.%m.%Y'))
-    attachement_name = 'le_temps_{}.pdf'.format(datetime.today().strftime('%Y_%m_%d'))
+        NOW.strftime('%A, %d.%m.%Y'))
+    attachement_name = 'le_temps_{}.pdf'.format(NOW.strftime('%Y_%m_%d'))
 
     # Run app
     pdf = download_pdf_with_config()
@@ -116,7 +119,7 @@ def main(data, context):
     # locale.setlocale(locale.LC_TIME, "fr-CH")
 
     # No episod on Sunday
-    if datetime.today().weekday() == SUNDAY:
+    if NOW.weekday() == SUNDAY:
         logging.info('It is Sunday. No edition will be downloaded today.')
     else:
         logging.info('It is not Sunday. Will try to download the daily edition.')
