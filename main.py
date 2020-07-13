@@ -12,7 +12,6 @@ from config import config_vars as configuration
 
 SUNDAY: int = 6
 TIMEZONE = pytz.timezone("Europe/Zurich")
-NOW = datetime.now(TIMEZONE)
 
 
 def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
@@ -48,8 +47,8 @@ def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
     return pdf_response.content
 
 
-def download_pdf_with_config():
-    today_str = NOW.strftime('%Y%m%d')
+def download_pdf_with_config(download_date):
+    today_str = download_date.strftime('%Y%m%d')
     pdf_url = "https://www.letemps.ch/pdf/{}/download".format(today_str)
     login_url = 'https://www.letemps.ch/user/login?destination=/'
     login_data = {
@@ -93,15 +92,15 @@ def send_email(server_address, port, send_from, send_to, email_password, email_c
         logging.info("Email sent successfully!")
 
 
-def run_app():
+def run_app(download_date):
     # Email text
-    subject = "Le Temps - {}".format(NOW.strftime('%d.%m.%Y'))
+    subject = "Le Temps - {}".format(download_date.strftime('%d.%m.%Y'))
     body = "Bonjour,\n\nVoici l'édition du jour du journal Le Temps ({}) en PDF.\n\nA bientôt,\nSystème automatique d'envoi par Daniel Guggenheim".format(
-        NOW.strftime('%A, %d.%m.%Y'))
-    attachement_name = 'le_temps_{}.pdf'.format(NOW.strftime('%Y_%m_%d'))
+        download_date.strftime('%A, %d.%m.%Y'))
+    attachement_name = 'le_temps_{}.pdf'.format(download_date.strftime('%Y_%m_%d'))
 
     # Run app
-    pdf = download_pdf_with_config()
+    pdf = download_pdf_with_config(download_date)
     msg = create_email(subject, body)
     attach_to_email(msg, pdf, attachement_name)
     send_email(configuration['email_server_address'], configuration['email_port'], configuration['send_from'],
@@ -117,13 +116,14 @@ def main(data, context):
     """
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(funcName)s %(levelname)s %(message)s')
     # locale.setlocale(locale.LC_TIME, "fr-CH")
+    now = datetime.now(TIMEZONE)
 
     # No episod on Sunday
-    if NOW.weekday() == SUNDAY:
-        logging.info('It is Sunday. No edition will be downloaded today.')
+    if now.weekday() == SUNDAY:
+        logging.info(f'It is Sunday ({now}). No edition will be downloaded today.')
     else:
-        logging.info('It is not Sunday. Will try to download the daily edition.')
-        run_app()
+        logging.info(f'It is not Sunday ({now}). Will try to download the daily edition.')
+        run_app(now)
 
 
 if __name__ == "__main__":
