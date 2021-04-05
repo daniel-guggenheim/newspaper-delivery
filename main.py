@@ -39,6 +39,7 @@ def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
                 logging.error(login_response.content)
                 logging.error("pdf_response.content:")
                 logging.error(pdf_response.content)
+                pdf_response.raise_for_status()
         except Exception as e:
             logging.error("Exception while trying to download PDF from LeTemps.")
             logging.exception(e)
