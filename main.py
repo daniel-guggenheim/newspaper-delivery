@@ -9,18 +9,17 @@ from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.utils import formatdate
 from config import config_vars as configuration
+from bs4 import BeautifulSoup
 
 SUNDAY: int = 6
 TIMEZONE = pytz.timezone("Europe/Zurich")
 
 
-def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
+def download_pdf(pdf_url, timeout=(5, 20)):
     logging.info("Connecting to LeTemps website to download pdf.")
     with requests.Session() as session:
         try:
-            logging.info("Login to LeTemps at {}".format(login_url))
-            login_response = session.post(login_url, data=login_data, timeout=30)
-
+            login_to_website(session)
             # Download pdf and handle timeout
             logging.info("Download pdf file from {}".format(pdf_url))
             try:
@@ -29,14 +28,13 @@ def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
                 logging.error("Request timed out: {}.".format(timeout))
                 logging.error(e)
                 logging.info("Starting new request with double timeout.")
-                return download_pdf(pdf_url, login_url, login_data, timeout=(timeout[0] * 2, timeout[1] * 2))
+                return download_pdf(pdf_url, timeout=(timeout[0] * 2, timeout[1] * 2))
+
+            logging.info(f"Received a response of type {pdf_response.headers.get('Content-Type')} and a file of size {pdf_response.headers.get('Content-Length')} bytes.")
 
             # Handling response
             if not pdf_response.ok:
-                logging.error("Impossible to download pdf from 'Le Temps'. Error code is {}.".format(
-                    pdf_response.status_code))
-                logging.error("login_response.content:")
-                logging.error(login_response.content)
+                logging.error("Impossible to download pdf from 'Le Temps'. Error code is {}.".format(pdf_response.status_code))
                 logging.error("pdf_response.content:")
                 logging.error(pdf_response.content)
                 pdf_response.raise_for_status()
@@ -48,18 +46,97 @@ def download_pdf(pdf_url, login_url, login_data, timeout=(5, 20)):
     return pdf_response.content
 
 
-def download_pdf_with_config(download_date):
-    today_str = download_date.strftime('%Y%m%d')
-    pdf_url = "https://www.letemps.ch/pdf/{}/download".format(today_str)
-    login_url = 'https://www.letemps.ch/user/login?destination=/'
-    login_data = {
-        "name": configuration['username_letemps'],
-        "pass": configuration['password_letemps'],
-        "form_build_id": configuration['form_build_id_letemps'],
-        "form_id": "user_login_form",
-        "op": "Se connecter",
+def login_to_website(session):
+    # First, extract the auth / connection tokens
+    connection_page = session.get("https://www.letemps.ch/compte/connexion")
+    soup = BeautifulSoup(connection_page.content, 'html.parser')
+
+    # Step 2: Extract the authenticity_token
+    token_input = soup.find('input', {'name': 'authenticity_token'})
+    if token_input is not None:
+        authenticity_token = token_input['value']
+    else:
+        raise Exception("Could not find the authenticity_token")
+
+    # # Step 2: Extract the hash_cash => needs to do some work for it..
+    # hash_cash_input = soup.find('input', {'name': 'hashcash'})
+    # if hash_cash_input:
+    #     hash_cash = hash_cash_input['value']
+    # else:
+    #     raise Exception("Could not find the authenticity_token")
+
+    login_headers = {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "accept-language": "fr",
+        "cache-control": "no-cache",
+        "content-type": "application/x-www-form-urlencoded",
+        "pragma": "no-cache",
+        "sec-ch-ua": "\"Chromium\";v=\"116\", \"Not)A;Brand\";v=\"24\", \"Google Chrome\";v=\"116\"",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"Windows\"",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-site": "same-origin",
+        "upgrade-insecure-requests": "1"
     }
-    return download_pdf(pdf_url, login_url, login_data)
+
+    login_data = {
+        "utf8": "✓",
+        "authenticity_token": authenticity_token,
+        "hashcash": "1:18:230819:www.letemps.ch::4coa516uue:114137",  # probably can't work long...
+        "user[email]": configuration['username_letemps'],
+        "user[password]": configuration['password_letemps'],
+        "user[remember_me]": "1",
+        "commit": "Connexion"
+    }
+    login_url = "https://www.letemps.ch/compte/connexion"
+
+    logging.info("Login to LeTemps at {}".format(login_url))
+    login_response = session.post(login_url, headers=login_headers, data=login_data, allow_redirects=True, timeout=30)
+    login_response.raise_for_status()
+
+
+def find_pdf_url(input_date: datetime.date, base_url: str):
+    # Convert input_date to French day name, day, and month name
+    months_fr = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+                 "août", "septembre", "octobre", "novembre", "décembre"]
+    days_fr = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+    input_weekday = days_fr[input_date.weekday()]
+    input_day = str(input_date.day)
+    input_month = months_fr[input_date.month - 1]
+
+    # Fetch the webpage
+    fetch_url = base_url + "/pdf"
+    logging.info(f"Will attempt to fetch the webpage {fetch_url} to find the pdf url.")
+    response = requests.get(fetch_url)
+    response.raise_for_status()
+
+    # Parse the webpage
+    soup = BeautifulSoup(response.content, 'html.parser')
+    logging.info(f"Will attempt to parse webpage to find pdf url with dates {input_weekday}, {input_day}, {input_month}")
+
+    # Find the article with the desired date
+    articles = soup.find_all('article')
+    logging.info(f"Found {len(articles)} article elements to parse")
+
+    for article in articles:
+        article_text = article.get_text()
+        if input_weekday in article_text and input_day in article_text and input_month in article_text:  # we check that the date corresponds
+            logging.info(f"Found the correct article.")
+            pdf_link = article.find('a', string=lambda text: text and "pdf" in text.lower())  # we look for PDF inside the <a> tag
+            if pdf_link:
+                logging.info(f"Found the downloadable pdf link: {pdf_link}")
+
+                return base_url + pdf_link['href']
+
+    logging.error(f"Did not find any downloaded pdf link in the page")
+    raise Exception(f"Did not find any downloaded pdf link in the page {fetch_url} with dates {input_weekday}, {input_day}, {input_month}")
+
+
+def download_pdf_with_config(download_date):
+    pdf_url = find_pdf_url(download_date, "https://www.letemps.ch")
+    return download_pdf(pdf_url)
 
 
 def create_email(subject, body):
