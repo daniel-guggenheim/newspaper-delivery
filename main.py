@@ -117,7 +117,7 @@ def find_pdf_url(input_date: datetime.date, base_url: str):
     logging.info(f"Will attempt to parse webpage to find pdf url with dates {input_weekday}, {input_day}, {input_month}")
 
     # Find the article with the desired date
-    articles = soup.find_all('article')
+    articles = soup.find_all('article', class_='print_edition-tps')
     logging.info(f"Found {len(articles)} article elements to parse")
 
     for article in articles:
