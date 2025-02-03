@@ -15,38 +15,32 @@ SUNDAY: int = 6
 TIMEZONE = pytz.timezone("Europe/Zurich")
 
 
-def download_pdf(pdf_url, timeout=(5, 20)):
-    logging.info("Connecting to LeTemps website to download pdf.")
-    with requests.Session() as session:
-        try:
-            login_to_website(session)
-            # Download pdf and handle timeout
-            logging.info("Download pdf file from {}".format(pdf_url))
-            try:
-                pdf_response = session.get(pdf_url, timeout=timeout)
-            except requests.exceptions.Timeout as e:
-                logging.error("Request timed out: {}.".format(timeout))
-                logging.error(e)
-                logging.info("Starting new request with double timeout.")
-                return download_pdf(pdf_url, timeout=(timeout[0] * 2, timeout[1] * 2))
+def download_pdf(pdf_url: str, session: requests.Session, timeout=(5, 20)):
+    try:
+        # Download pdf and handle timeout
+        logging.info("Download pdf file from {}".format(pdf_url))
+        pdf_response = session.get(pdf_url, timeout=timeout)
+    except requests.exceptions.Timeout as e:
+        logging.error("Request timed out: {}.".format(timeout))
+        logging.error(e)
+        logging.info("Starting new request with double timeout.")
+        return download_pdf(pdf_url, session, timeout=(timeout[0] * 2, timeout[1] * 2))
 
-            logging.info(f"Received a response of type {pdf_response.headers.get('Content-Type')} and a file of size {pdf_response.headers.get('Content-Length')} bytes.")
+    logging.info(f"Received a response of type {pdf_response.headers.get('Content-Type')} and a file of size {pdf_response.headers.get('Content-Length')} bytes.")
 
-            # Handling response
-            if not pdf_response.ok:
-                logging.error("Impossible to download pdf from 'Le Temps'. Error code is {}.".format(pdf_response.status_code))
-                logging.error("pdf_response.content:")
-                logging.error(pdf_response.content)
-                pdf_response.raise_for_status()
-        except Exception as e:
-            logging.error("Exception while trying to download PDF from LeTemps.")
-            logging.exception(e)
-            raise e
+    # Handling response
+    if not pdf_response.ok:
+        logging.error("Impossible to download pdf from 'Le Temps'. Error code is {}.".format(pdf_response.status_code))
+        logging.error("pdf_response.content:")
+        logging.error(pdf_response.content)
+        pdf_response.raise_for_status()
+
     logging.info("Pdf downloaded successfully")
     return pdf_response.content
 
 
 def login_to_website(session):
+    logging.info("Login to LeTemps website.")
     # First, extract the auth / connection tokens
     connection_page = session.get("https://www.letemps.ch/compte/connexion")
     soup = BeautifulSoup(connection_page.content, 'html.parser')
@@ -96,7 +90,7 @@ def login_to_website(session):
     login_response.raise_for_status()
 
 
-def find_pdf_url(input_date: datetime.date, base_url: str):
+def find_pdf_url(input_date: datetime.date, base_url: str, session: requests.Session):
     # Convert input_date to French day name, day, and month name
     months_fr = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
                  "août", "septembre", "octobre", "novembre", "décembre"]
@@ -109,7 +103,7 @@ def find_pdf_url(input_date: datetime.date, base_url: str):
     # Fetch the webpage
     fetch_url = base_url + "/pdf"
     logging.info(f"Will attempt to fetch the webpage {fetch_url} to find the pdf url.")
-    response = requests.get(fetch_url)
+    response = session.get(fetch_url)
     response.raise_for_status()
 
     # Parse the webpage
@@ -135,8 +129,15 @@ def find_pdf_url(input_date: datetime.date, base_url: str):
 
 
 def download_pdf_with_config(download_date):
-    pdf_url = find_pdf_url(download_date, "https://www.letemps.ch")
-    return download_pdf(pdf_url)
+    with requests.Session() as session:
+        try:
+            login_to_website(session)
+            pdf_url = find_pdf_url(download_date, "https://www.letemps.ch", session)
+            return download_pdf(pdf_url, session)
+        except Exception as e:
+            logging.error("Exception while trying to download PDF from LeTemps.")
+            logging.exception(e)
+            raise e
 
 
 def create_email(subject, body):
@@ -173,7 +174,7 @@ def send_email(server_address, port, send_from, send_to, email_password, email_c
 def run_app(download_date):
     # Email text
     subject = "Le Temps - {}".format(download_date.strftime('%d.%m.%Y'))
-    body = "Bonjour,\n\nVoici l'édition du jour du journal Le Temps ({}) en PDF.\n\nA bientôt,\nSystème automatique d'envoi par Daniel Guggenheim".format(
+    body = "Bonjour,\n\nVoici l'édition du jour du journal Le Temps ({}) en PDF.\n\nA bientôt,\nSystème automatique d'envoi".format(
         download_date.strftime('%A, %d.%m.%Y'))
     attachement_name = 'le_temps_{}.pdf'.format(download_date.strftime('%Y_%m_%d'))
 
